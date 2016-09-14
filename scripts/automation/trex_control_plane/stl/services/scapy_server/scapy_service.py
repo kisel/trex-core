@@ -143,6 +143,20 @@ class Scapy_service_api():
         """
         pass
 
+    def read_pcap(self,client_v_handler,binary_pkt):
+        """ read_pcap(self,client_v_handler,binary_pkt)
+
+        Parses pcap file contents and returns an array with build_pkt information for each packet
+
+        Parameters
+        ----------
+        binary pcap file in base64 encoding
+
+        Returns
+        -------
+        Array of build_pkt(packet)
+        """
+        pass
 
 class ScapyException(Exception): pass
 class Scapy_service(Scapy_service_api):
@@ -434,9 +448,21 @@ class Scapy_service(Scapy_service_api):
 
 #input of binary_pkt must be encoded in base64
     def reconstruct_pkt(self,client_v_handler,binary_pkt):
-        pkt_in_hex = binary_pkt.decode('base64')
-        scapy_pkt = Ether(pkt_in_hex)
+        pkt_bin = binary_pkt.decode('base64')
+        scapy_pkt = Ether(pkt_bin)
         return self._pkt_data(scapy_pkt)
+
+    def read_pcap(self,client_v_handler,binary_pkt):
+        pcap_bin = binary_pkt.decode('base64')
+        pcap = []
+        res_packets = []
+        with tempfile.NamedTemporaryFile() as tmpPcap:
+            tmpPcap.write(pcap_bin)
+            tmpPcap.flush()
+            pcap = rdpcap(tmpPcap.name)
+        for scapy_packet in pcap:
+            res_packets.append(self._pkt_data(scapy_packet))
+        return res_packets
 
 
  
