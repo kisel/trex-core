@@ -373,6 +373,16 @@ class Scapy_service(Scapy_service_api):
             base_layer = base_layer/packet_layer
         return base_layer
 
+    def _pkt_data(self,pkt):
+        show2data = self._show2_to_dict(pkt)
+        bufferData = str(pkt) #pkt buffer
+        bufferData = binascii.b2a_base64(bufferData)
+        pkt_offsets = self._get_all_pkt_offsets(pkt.command())
+        res = {}
+        res['show2'] = show2data
+        res['buffer'] = bufferData
+        res['offsets'] = pkt_offsets
+        return res
 
 #--------------------------------------------API implementation-------------
     def get_tree(self,client_v_handler):
@@ -389,15 +399,7 @@ class Scapy_service(Scapy_service_api):
         if not (self._verify_version_handler(client_v_handler)):
             raise ScapyException(self._generate_invalid_version_error())
         pkt = self._packet_model_to_scapy_packet(pkt_model_descriptor)
-        show2data = self._show2_to_dict(pkt)
-        bufferData = str(pkt) #pkt buffer
-        bufferData = binascii.b2a_base64(bufferData)
-        pkt_offsets = self._get_all_pkt_offsets(pkt.command())
-        res = {}
-        res['show2'] = show2data
-        res['buffer'] = bufferData
-        res['offsets'] = pkt_offsets
-        return res
+        return self._pkt_data(pkt)
 
     def get_all(self,client_v_handler):
         if not (self._verify_version_handler(client_v_handler)):
@@ -434,8 +436,7 @@ class Scapy_service(Scapy_service_api):
     def reconstruct_pkt(self,client_v_handler,binary_pkt):
         pkt_in_hex = binary_pkt.decode('base64')
         scapy_pkt = Ether(pkt_in_hex)
-        scapy_pkt_cmd = scapy_pkt.command()
-        return self.build_pkt(client_v_handler,scapy_pkt_cmd)
+        return self._pkt_data(scapy_pkt)
 
 
  
