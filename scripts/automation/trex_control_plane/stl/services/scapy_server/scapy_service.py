@@ -295,9 +295,9 @@ class Scapy_service(Scapy_service_api):
 
             protocol_offset = pkt_offsets[protocol_name]
             protocol = {
-                'protocolId' : protocol_name,
+                'id' : protocol_name,
                 'fields' : [],
-                'protocolOffset' : protocol_offset['global_offset']
+                'offset' : protocol_offset['global_offset']
             }
             print("Try to get offset for: "+protocol_name)
             print("Offsets for: " + protocol_name)
