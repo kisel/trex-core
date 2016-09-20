@@ -7,7 +7,7 @@ sys.path.append(stl_pathname)
 from trex_stl_lib.api import *
 import tempfile
 import hashlib
-import binascii
+import base64
 from pprint import pprint
 #from scapy.layers.dns import DNS
 #from scapy.contrib.mpls import MPLS
@@ -272,26 +272,56 @@ class Scapy_service(Scapy_service_api):
         return fieldDict
 
     def _show2_to_dict(self,pkt):
+        # TODO: Re-implement with proper traversing packet
         old_stdout = sys.stdout
         sys.stdout = mystdout = StringIO()
         pkt.show2()
         sys.stdout = old_stdout
         show2data = mystdout.getvalue() #show2 data
         listedShow2Data = show2data.split('###')
-        show2Dict = {}
+        result = []
+        pkt_offsets = self._get_all_pkt_offsets(pkt.command())
         for i in range(1,len(listedShow2Data)-1,2):
+
             protocol_fields = listedShow2Data[i+1]
             protocol_fields = protocol_fields.split('\n')[1:-1]
             protocol_fields = [f.strip() for f in protocol_fields]
-            protocol_fields_dict = {}
+            protocol_name = re.sub(r'\W+', '', listedShow2Data[i])  # clear layer name to include only alpha-numeric
+
+            if protocol_name == 'Ethernet':
+                protocol_name = 'Ether'
+
+            if protocol_name == 'load':
+                protocol_name = 'Raw'
+
+            protocol_offset = pkt_offsets[protocol_name]
+            protocol = {
+                'id' : protocol_name,
+                'fields' : [],
+                'offset' : protocol_offset['global_offset']
+            }
+            print("Try to get offset for: "+protocol_name)
+            print("Offsets for: " + protocol_name)
+            print(protocol_offset)
+
             for f in protocol_fields:
                 field_data = f.split('=')
                 if len(field_data)!= 1 :
                     field_name = field_data[0].strip()
-                    protocol_fields_dict[field_name] = field_data[1].strip()
-            layer_name = re.sub(r'\W+', '',listedShow2Data[i]) #clear layer name to include only alpha-numeric
-            show2Dict[layer_name] = protocol_fields_dict
-        return show2Dict
+
+                    if field_name == 'load':
+                        continue
+
+                    field = {
+                        'name': field_name,
+                        'value': field_data[1].strip(),
+                        'offset': protocol_offset[field_name][0],
+                        'length': protocol_offset[field_name][1]
+                    }
+                    protocol['fields'].append(field)
+
+            result.append(protocol)
+        return result
 
 #pkt_desc as string
 #dictionary of offsets per protocol. tuple for each field: (name, offset, size) at json format
@@ -322,7 +352,7 @@ class Scapy_service(Scapy_service_api):
         container = json.dumps(container)
         m = hashlib.md5()
         m.update(container.encode('ascii'))
-        res_md5 = binascii.b2a_base64(m.digest())
+        res_md5 = base64.b64encode(m.digest())
         return res_md5
 
     def get_version(self):
@@ -349,7 +379,7 @@ class Scapy_service(Scapy_service_api):
         v_for_hash = v_major+v_minor+v_major+v_minor
         m = hashlib.md5()
         m.update(v_for_hash)
-        v_handle = binascii.b2a_base64(m.digest())
+        v_handle = base64.b64encode(m.digest())
         return unicode(v_handle,"utf-8")
 
     def _generate_invalid_version_error(self):
@@ -390,13 +420,8 @@ class Scapy_service(Scapy_service_api):
 
     def _pkt_data(self,pkt):
         show2data = self._show2_to_dict(pkt)
-        bufferData = str(pkt) #pkt buffer
-        bufferData = binascii.b2a_base64(bufferData)
-        pkt_offsets = self._get_all_pkt_offsets(pkt.command())
-        res = {}
-        res['show2'] = show2data
-        res['buffer'] = bufferData
-        res['offsets'] = pkt_offsets
+        binary = base64.b64encode(str(pkt))
+        res = {'data': show2data, 'binary': binary}
         return res
 
 #--------------------------------------------API implementation-------------
@@ -415,6 +440,11 @@ class Scapy_service(Scapy_service_api):
             raise ScapyException(self._generate_invalid_version_error())
         pkt = self._packet_model_to_scapy_packet(pkt_model_descriptor)
         return self._pkt_data(pkt)
+
+    #Temporary method for debugging purposes
+    def getHttpPkt(self):
+        pktList = rdpcap('/home/trex/http_get_request.pcap')
+        return self._pkt_data(pktList[0])
 
     def get_all(self,client_v_handler):
         if not (self._verify_version_handler(client_v_handler)):
