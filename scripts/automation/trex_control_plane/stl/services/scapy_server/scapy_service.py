@@ -124,14 +124,15 @@ class Scapy_service_api():
         """
         pass
     
-    def reconstruct_pkt(self,client_v_handler,binary_pkt):
+    def reconstruct_pkt(self,client_v_handler,binary_pkt,model_descriptor):
         """ reconstruct_pkt(self,client_v_handler,binary_pkt)
 
-        Makes a Scapy valid packet from a binary string and returns all information returned in build_pkt
+        Makes a Scapy valid packet by applying changes to binary packet and returns all information returned in build_pkt
 
         Parameters
         ----------
-        Packet in binary, formatted in "base64" encoding
+        Source packet in binary_pkt, formatted in "base64" encoding
+        List of changes in model_descriptor
 
         Returns
         -------
@@ -447,9 +448,20 @@ class Scapy_service(Scapy_service_api):
             raise ScapyException("Fields DB is not up to date")
 
 #input of binary_pkt must be encoded in base64
-    def reconstruct_pkt(self,client_v_handler,binary_pkt):
+    def reconstruct_pkt(self,client_v_handler,binary_pkt,model_descriptor):
         pkt_bin = binary_pkt.decode('base64')
         scapy_pkt = Ether(pkt_bin)
+        scapy_layer = scapy_pkt
+        for model_layer in model_descriptor:
+            if 'fields' in model_layer:
+                for field in model_layer['fields']:
+                    key = field['id']
+                    value = field['value']
+                    if key in scapy_layer.fields:
+                        setattr(scapy_layer, key, value)
+                    else:
+                        raise ScapyException("Field to change not found")
+            scapy_layer = scapy_layer.payload
         return self._pkt_data(scapy_pkt)
 
     def read_pcap(self,client_v_handler,binary_pkt):
