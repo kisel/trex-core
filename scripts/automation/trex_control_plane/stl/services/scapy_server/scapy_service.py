@@ -441,11 +441,6 @@ class Scapy_service(Scapy_service_api):
         pkt = self._packet_model_to_scapy_packet(pkt_model_descriptor)
         return self._pkt_data(pkt)
 
-    #Temporary method for debugging purposes
-    def getHttpPkt(self):
-        pktList = rdpcap('/home/trex/http_get_request.pcap')
-        return self._pkt_data(pktList[0])
-
     def get_all(self,client_v_handler):
         if not (self._verify_version_handler(client_v_handler)):
             raise ScapyException(self._generate_invalid_version_error())
