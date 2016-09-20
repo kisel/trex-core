@@ -2,6 +2,7 @@
 import time
 import sys
 import os
+import traceback
 
 stl_pathname = os.path.abspath(os.path.join(os.pardir, os.pardir))
 if stl_pathname not in sys.path:
@@ -142,6 +143,7 @@ class Scapy_server():
                 except Exception as e:
                     response = self.scapy_wrapper.error_handler(e,req_id)
                     self.logger.info('ERROR %s: %s',response['error']['code'], response['error']['message'])
+                    self.logger.info('Exception info: %s' % traceback.format_exc())
                 finally:
                     json_response = json.dumps(response)
                     self.logger.info('Sending Message: %s' % json_response)
