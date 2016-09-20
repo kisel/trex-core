@@ -144,8 +144,8 @@ class Scapy_service_api():
         """
         pass
 
-    def read_pcap(self,client_v_handler,binary_pkt):
-        """ read_pcap(self,client_v_handler,binary_pkt)
+    def read_pcap(self,client_v_handler,pcap_base64):
+        """ read_pcap(self,client_v_handler,pcap_base64)
 
         Parses pcap file contents and returns an array with build_pkt information for each packet
 
@@ -156,6 +156,21 @@ class Scapy_service_api():
         Returns
         -------
         Array of build_pkt(packet)
+        """
+        pass
+
+    def write_pcap(self,client_v_handler,packets_base64):
+        """ write_pcap(self,client_v_handler,packets_base64)
+
+        Writes binary packets to pcap file
+
+        Parameters
+        ----------
+        array of binary packets in base64 encoding
+
+        Returns
+        -------
+        binary pcap file in base64 encoding
         """
         pass
 
@@ -489,11 +504,11 @@ class Scapy_service(Scapy_service_api):
             scapy_layer = scapy_layer.payload
         return self._pkt_data(scapy_pkt)
 
-    def read_pcap(self,client_v_handler,binary_pkt):
-        pcap_bin = binary_pkt.decode('base64')
+    def read_pcap(self,client_v_handler,pcap_base64):
+        pcap_bin = pcap_base64.decode('base64')
         pcap = []
         res_packets = []
-        with tempfile.NamedTemporaryFile() as tmpPcap:
+        with tempfile.NamedTemporaryFile(mode='w+b') as tmpPcap:
             tmpPcap.write(pcap_bin)
             tmpPcap.flush()
             pcap = rdpcap(tmpPcap.name)
@@ -501,6 +516,13 @@ class Scapy_service(Scapy_service_api):
             res_packets.append(self._pkt_data(scapy_packet))
         return res_packets
 
+    def write_pcap(self,client_v_handler,packets_base64):
+        packets = [Ether(pkt_b64.decode('base64')) for pkt_b64 in packets_base64]
+        pcap_bin = None
+        with tempfile.NamedTemporaryFile(mode='r+b') as tmpPcap:
+            wrpcap(tmpPcap.name, packets)
+            pcap_bin = tmpPcap.read()
+        return base64.b64encode(pcap_bin)
 
  
 
