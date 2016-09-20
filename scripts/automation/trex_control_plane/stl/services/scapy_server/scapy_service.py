@@ -328,7 +328,7 @@ class Scapy_service(Scapy_service_api):
                         continue
 
                     field = {
-                        'name': field_name,
+                        'id': field_name,
                         'value': field_data[1].strip(),
                         'offset': protocol_offset[field_name][0],
                         'length': protocol_offset[field_name][1]
