@@ -493,6 +493,10 @@ class Scapy_service(Scapy_service_api):
         scapy_pkt = Ether(pkt_bin)
         scapy_layer = scapy_pkt
         for model_layer in model_descriptor:
+            if scapy_pkt is None: 
+                raise ScapyException("Model inconsistent")
+            if model_layer['id'] != scapy_layer.__class__.__name__:
+                raise ScapyException("Protocol id inconsistent")
             if 'fields' in model_layer:
                 for field in model_layer['fields']:
                     key = field['id']
