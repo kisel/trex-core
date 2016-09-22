@@ -405,6 +405,8 @@ class Scapy_service(Scapy_service_api):
         return base_layer
 
     def _pkt_data(self,pkt):
+        if pkt == None:
+            return {'data': [], 'binary': None}
         data = self._pkt_to_field_tree(pkt)
         binary = base64.b64encode(str(pkt))
         res = {'data': data, 'binary': binary}
@@ -462,11 +464,28 @@ class Scapy_service(Scapy_service_api):
     def reconstruct_pkt(self,client_v_handler,binary_pkt,model_descriptor):
         pkt_bin = binary_pkt.decode('base64')
         scapy_pkt = Ether(pkt_bin)
-        scapy_layer = scapy_pkt
-        for model_layer in model_descriptor:
-            if scapy_pkt is None: 
-                raise ScapyException("Model inconsistent")
-            if model_layer['id'] != scapy_layer.__class__.__name__:
+        if not model_descriptor:
+            model_descriptor = []
+        for depth in range(len(model_descriptor)):
+            model_layer = model_descriptor[depth]
+            if model_layer.get('delete') is True:
+                # slice packet from the current item
+                if depth == 0:
+                    scapy_pkt = None
+                    break
+                else:
+                    scapy_pkt[depth-1].payload = None
+                    break
+            if depth > 0 and scapy_pkt[depth-1].payload == None:
+                # insert new layer(s) from json definition
+                remaining_definitions = model_descriptor[depth:]
+                pkt_to_append = self._packet_model_to_scapy_packet(remaining_definitions)
+                scapy_pkt = scapy_pkt / pkt_to_append
+                break
+            # modify fields of existing stack items
+            scapy_layer = scapy_pkt[depth]
+            if model_layer['id'] != type(scapy_layer).__name__:
+                # TODO: support replacing payload, instead of breaking
                 raise ScapyException("Protocol id inconsistent")
             if 'fields' in model_layer:
                 for field in model_layer['fields']:
@@ -476,7 +495,6 @@ class Scapy_service(Scapy_service_api):
                         setattr(scapy_layer, key, value)
                     else:
                         raise ScapyException("Field to change not found")
-            scapy_layer = scapy_layer.payload
         return self._pkt_data(scapy_pkt)
 
     def read_pcap(self,client_v_handler,pcap_base64):
