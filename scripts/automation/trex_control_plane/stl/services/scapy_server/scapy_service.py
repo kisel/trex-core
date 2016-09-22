@@ -493,9 +493,22 @@ class Scapy_service(Scapy_service_api):
                     if "delete" in field and field["delete"] is True:
                         scapy_layer.delfieldval(fieldId)
                     elif "hvalue" in field:
+                        field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
                         # human-value. guess the type and convert to internal value
-                        # seems setfieldval already does this, so just use it
-                        scapy_layer.setfieldval(fieldId, field['hvalue'])
+                        # seems setfieldval already does this for some fields,
+                        # but does not convert strings/hex(0x123) to integers and long
+                        hvalue = field['hvalue']
+                        cval_numeric = type(current_val) in [int, long]
+                        nval_str = type(hvalue) in [str, unicode]
+                        if cval_numeric and nval_str:
+                            val_constructor = type(current_val) # from str to int/long with base as a param
+                            if len(hvalue) == 0:
+                                hvalue = None
+                            elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
+                                hvalue = val_constructor(hvalue, 16)
+                            elif re.match(r"^\d+$", hvalue): # base10
+                                hvalue = val_constructor(hvalue)
+                        scapy_layer.setfieldval(fieldId, hvalue)
                     else:
                         scapy_layer.setfieldval(fieldId, field['value'])
         return self._pkt_data(scapy_pkt)
