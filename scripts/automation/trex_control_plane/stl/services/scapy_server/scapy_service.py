@@ -489,12 +489,15 @@ class Scapy_service(Scapy_service_api):
                 raise ScapyException("Protocol id inconsistent")
             if 'fields' in model_layer:
                 for field in model_layer['fields']:
-                    key = field['id']
-                    value = field['value']
-                    if key in scapy_layer.fields:
-                        setattr(scapy_layer, key, value)
+                    fieldId = field['id']
+                    if "delete" in field and field["delete"] is True:
+                        scapy_layer.delfieldval(fieldId)
+                    elif "hvalue" in field:
+                        # human-value. guess the type and convert to internal value
+                        # seems setfieldval already does this, so just use it
+                        scapy_layer.setfieldval(fieldId, field['hvalue'])
                     else:
-                        raise ScapyException("Field to change not found")
+                        scapy_layer.setfieldval(fieldId, field['value'])
         return self._pkt_data(scapy_pkt)
 
     def read_pcap(self,client_v_handler,pcap_base64):
