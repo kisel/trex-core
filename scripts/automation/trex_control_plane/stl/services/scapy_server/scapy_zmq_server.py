@@ -145,8 +145,14 @@ class Scapy_server():
                     self.logger.info('ERROR %s: %s',response['error']['code'], response['error']['message'])
                     self.logger.info('Exception info: %s' % traceback.format_exc())
                 finally:
-                    json_response = json.dumps(response)
-                    self.logger.info('Sending Message: %s' % json_response)
+                    try:
+                        json_response = json.dumps(response)
+                        self.logger.info('Sending Message: %s' % json_response)
+                    except Exception:
+                        # rare case when json can not be searialized due to encoding issues
+                        # object is not JSON serializable
+                        self.logger.error('Unexpected Error: %s' % traceback.format_exc())
+
                 #  Send reply back to client
                     self.socket.send_string(json_response)
                     if (method == 'shut_down'):
