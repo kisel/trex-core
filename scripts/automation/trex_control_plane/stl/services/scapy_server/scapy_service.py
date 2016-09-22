@@ -286,6 +286,47 @@ class Scapy_service(Scapy_service_api):
                 fieldDict[f] = self.ScapyFieldDesc(f).stringRegex()
         return fieldDict
 
+    def _fully_define(self,pkt):
+        # returns scapy object with all fields initialized
+        rootClass = type(pkt)
+        full_pkt = rootClass(str(pkt))
+        full_pkt.build() # this trick initializes offset
+        return full_pkt
+
+    def _pkt_to_field_tree(self,pkt):
+        pkt = self._fully_define(pkt)
+        result = []
+        while pkt:
+            layer_id = type(pkt).__name__ # Scapy classname
+            layer_name = pkt.name # Display name
+            fields = []
+            for field_desc in pkt.fields_desc:
+                field_id = field_desc.name
+                offset = field_desc.offset
+                protocol_offset = pkt.offset
+                field_sz = field_desc.get_size_bytes()
+                value = getattr(pkt, field_id)
+                layer_name = type(pkt)
+                if field_desc.name is 'load':
+                    layer_name ='Raw'
+                    field_sz = len(pkt)
+                field_data = {
+                        "id": field_id,
+                        "value": value,
+                        "hvalue": field_desc.i2repr(pkt, value), # "nice" human value
+                        "offset": offset,
+                        "length": field_sz,
+                        }
+                fields.append(field_data)
+            layer_data = {
+                    "id": layer_id,
+                    "offset": pkt.offset,
+                    "fields": fields,
+                    }
+            result.append(layer_data)
+            pkt = pkt.payload
+        return result
+
     def _show2_to_dict(self,pkt):
         # TODO: Re-implement with proper traversing packet
         old_stdout = sys.stdout
@@ -434,9 +475,9 @@ class Scapy_service(Scapy_service_api):
         return base_layer
 
     def _pkt_data(self,pkt):
-        show2data = self._show2_to_dict(pkt)
+        data = self._pkt_to_field_tree(pkt)
         binary = base64.b64encode(str(pkt))
-        res = {'data': show2data, 'binary': binary}
+        res = {'data': data, 'binary': binary}
         return res
 
 #--------------------------------------------API implementation-------------
