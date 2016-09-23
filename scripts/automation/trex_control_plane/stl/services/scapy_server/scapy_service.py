@@ -306,6 +306,11 @@ class Scapy_service(Scapy_service_api):
                 protocol_offset = pkt.offset
                 field_sz = field_desc.get_size_bytes()
                 value = getattr(pkt, field_id)
+                hvalue = value
+                if type(value) not in [str, unicode]:
+                    # "nice" human value, however strings can take extra quotes
+                    # which is not acceptable. consider using i2h
+                    hvalue = field_desc.i2repr(pkt, value)
                 layer_name = type(pkt)
                 if field_desc.name is 'load':
                     layer_name ='Raw'
@@ -313,7 +318,7 @@ class Scapy_service(Scapy_service_api):
                 field_data = {
                         "id": field_id,
                         "value": value,
-                        "hvalue": field_desc.i2repr(pkt, value), # "nice" human value
+                        "hvalue": hvalue,
                         "offset": offset,
                         "length": field_sz,
                         }
