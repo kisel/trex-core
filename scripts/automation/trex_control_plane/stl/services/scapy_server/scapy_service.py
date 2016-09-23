@@ -379,8 +379,8 @@ class Scapy_service(Scapy_service_api):
         class_name = scapy_layer_names.index(layer['id'])
         class_p = scapy_layers[class_name] # class pointer
         kwargs = {}
-        if 'Fields' in layer:
-            for field in layer['Fields']:
+        if 'fields' in layer:
+            for field in layer['fields']:
                 key = field['id']
                 value = field['value']
                 if type(value) is list:
@@ -388,7 +388,7 @@ class Scapy_service(Scapy_service_api):
                     for arg_class in value:
                         option_class_p = scapy.all.__dict__[arg_class["class"]]
                         option_kwargs = {}
-                        for field in arg_class['Fields']:
+                        for field in arg_class['fields']:
                             option_kwargs[field['id']] = field['value']
                         resolved_value.append(option_class_p(**option_kwargs))
                     value = resolved_value
