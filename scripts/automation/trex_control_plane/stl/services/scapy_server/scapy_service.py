@@ -498,6 +498,9 @@ class Scapy_service(Scapy_service_api):
                     fieldId = field['id']
                     if "delete" in field and field["delete"] is True:
                         scapy_layer.delfieldval(fieldId)
+                    elif "randomize" in field and field["randomize"] is True:
+                        # random value will be generated on binary build
+                        scapy_layer.setfieldval(fieldId, scapy_layer.get_field(fieldId).randval())
                     elif "hvalue" in field:
                         field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
                         # human-value. guess the type and convert to internal value
