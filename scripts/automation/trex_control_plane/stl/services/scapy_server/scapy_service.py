@@ -311,9 +311,9 @@ class Scapy_service(Scapy_service_api):
                     # "nice" human value, however strings can take extra quotes
                     # which is not acceptable. consider using i2h
                     hvalue = field_desc.i2repr(pkt, value)
-                layer_name = type(pkt)
-                if field_desc.name is 'load':
-                    layer_name ='Raw'
+                if field_desc.name == 'load':
+                    # show Padding(and possible similar classes) as Raw
+                    layer_id = layer_name ='Raw'
                     field_sz = len(pkt)
                 field_data = {
                         "id": field_id,
@@ -325,6 +325,7 @@ class Scapy_service(Scapy_service_api):
                 fields.append(field_data)
             layer_data = {
                     "id": layer_id,
+                    "name": layer_name,
                     "offset": pkt.offset,
                     "fields": fields,
                     }
