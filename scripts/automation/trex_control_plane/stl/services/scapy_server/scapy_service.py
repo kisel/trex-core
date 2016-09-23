@@ -460,6 +460,11 @@ class Scapy_service(Scapy_service_api):
         else:
             raise ScapyException("Fields DB is not up to date")
 
+    def _is_last_layer(self, layer):
+        # can be used, that layer has no payload
+        # if true, the layer.payload is likely NoPayload()
+        return layer is layer.lastlayer()
+
 #input of binary_pkt must be encoded in base64
     def reconstruct_pkt(self,client_v_handler,binary_pkt,model_descriptor):
         pkt_bin = binary_pkt.decode('base64')
@@ -476,7 +481,7 @@ class Scapy_service(Scapy_service_api):
                 else:
                     scapy_pkt[depth-1].payload = None
                     break
-            if depth > 0 and scapy_pkt[depth-1].payload == None:
+            if depth > 0 and self._is_last_layer(scapy_pkt[depth-1]):
                 # insert new layer(s) from json definition
                 remaining_definitions = model_descriptor[depth:]
                 pkt_to_append = self._packet_model_to_scapy_packet(remaining_definitions)
