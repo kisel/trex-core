@@ -307,6 +307,7 @@ class Scapy_service(Scapy_service_api):
                 field_sz = field_desc.get_size_bytes()
                 value = getattr(pkt, field_id)
                 hvalue = value
+                value_base64 = None
                 if type(value) not in [str, unicode]:
                     # "nice" human value, however strings can take extra quotes
                     # which is not acceptable. consider using i2h
@@ -315,10 +316,17 @@ class Scapy_service(Scapy_service_api):
                     # show Padding(and possible similar classes) as Raw
                     layer_id = layer_name ='Raw'
                     field_sz = len(pkt)
+                    value_base64 = base64.b64encode(value)
+                    if value and not all(ord(c) < 128 for c in value):
+                        # payload contains non-ascii chars, which
+                        # sometimes can not be passed as unicode strings
+                        value = None
+                        hvalue = '<binary>'
                 field_data = {
                         "id": field_id,
                         "value": value,
                         "hvalue": hvalue,
+                        "value_base64": value_base64,
                         "offset": offset,
                         "length": field_sz,
                         }
