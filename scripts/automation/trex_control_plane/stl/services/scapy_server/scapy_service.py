@@ -302,6 +302,7 @@ class Scapy_service(Scapy_service_api):
             fields = []
             for field_desc in pkt.fields_desc:
                 field_id = field_desc.name
+                ignored = field_id not in pkt.fields
                 offset = field_desc.offset
                 protocol_offset = pkt.offset
                 field_sz = field_desc.get_size_bytes()
@@ -329,6 +330,7 @@ class Scapy_service(Scapy_service_api):
                         "value_base64": value_base64,
                         "offset": offset,
                         "length": field_sz,
+                        "ignored": ignored,
                         }
                 fields.append(field_data)
             layer_data = {
