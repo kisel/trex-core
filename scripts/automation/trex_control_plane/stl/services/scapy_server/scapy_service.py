@@ -308,6 +308,7 @@ class Scapy_service(Scapy_service_api):
                 field_sz = field_desc.get_size_bytes()
                 value = getattr(pkt, field_id)
                 hvalue = value
+                field_type = field_desc.__class__.__name__
                 value_base64 = None
                 if type(value) not in [str, unicode]:
                     # "nice" human value, however strings can take extra quotes
@@ -327,11 +328,20 @@ class Scapy_service(Scapy_service_api):
                         "id": field_id,
                         "value": value,
                         "hvalue": hvalue,
-                        "value_base64": value_base64,
                         "offset": offset,
                         "length": field_sz,
-                        "ignored": ignored,
+                        "field_type": field_type,
                         }
+                if ignored:
+                    field_data["ignored"] = ignored
+                if value_base64:
+                    field_data["value_base64"] = value_base64
+                if isinstance(field_desc, EnumField):
+                    try:
+                        field_data["values_dict"] = field_desc.s2i
+                    except:
+                        # MultiEnumField doesn't have s2i. need better handling
+                        pass
                 fields.append(field_data)
             layer_data = {
                     "id": layer_id,
