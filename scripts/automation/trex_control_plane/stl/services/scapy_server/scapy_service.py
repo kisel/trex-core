@@ -463,7 +463,11 @@ class Scapy_service(Scapy_service_api):
         if 'fields' in layer:
             for field in layer['fields']:
                 key = field['id']
-                value = field['value']
+                value = None
+                if 'value_base64' in field:
+                    value = b64_to_bytes(field['value_base64'])
+                else:
+                    value = field['value']
                 if type(value) is list:
                     resolved_value = []
                     for arg_class in value:
@@ -581,6 +585,9 @@ class Scapy_service(Scapy_service_api):
                     elif "randomize" in field and field["randomize"] is True:
                         # random value will be generated on binary build
                         scapy_layer.setfieldval(fieldId, scapy_layer.get_field(fieldId).randval())
+                    elif "value_base64" in field:
+                        buf = b64_to_bytes(field['value_base64'])
+                        scapy_layer.setfieldval(fieldId, buf)
                     elif "hvalue" in field:
                         field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
                         # human-value. guess the type and convert to internal value
