@@ -8,6 +8,7 @@ from trex_stl_lib.api import *
 import tempfile
 import hashlib
 import base64
+import numbers
 from pprint import pprint
 #from scapy.layers.dns import DNS
 #from scapy.contrib.mpls import MPLS
@@ -174,6 +175,45 @@ class Scapy_service_api():
         """
         pass
 
+def is_python(version):
+    return version == sys.version_info[0]
+
+def is_number(obj):
+    return isinstance(obj, numbers.Number)
+
+def is_string(obj):
+    return type(obj) == str or type(obj).__name__ == 'unicode' # python3 doesn't have unicode type
+
+def is_ascii_str(strval):
+    return strval and all(ord(ch) < 128 for ch in strval)
+
+def is_ascii_bytes(buf):
+    return buf and all(byte < 128 for byte in buf)
+
+def is_ascii(obj):
+    if is_bytes3(obj):
+        return is_ascii_bytes(obj)
+    else:
+        return is_ascii_str(obj)
+
+def is_bytes3(obj):
+    # checks if obj is exactly bytes(always false for python2)
+    return is_python(3) and type(obj) == bytes
+
+def str_to_bytes(strval):
+    return strval.encode("utf8")
+
+def bytes_to_str(buf):
+    return buf.decode("utf8")
+
+def b64_to_bytes(payload_base64):
+    # get bytes from base64 string(unicode)
+    return base64.b64decode(payload_base64)
+
+def bytes_to_b64(buf):
+    # bytes to base64 string(unicode)
+    return base64.b64encode(buf).decode('ascii')
+
 class ScapyException(Exception): pass
 class Scapy_service(Scapy_service_api):
 
@@ -289,7 +329,7 @@ class Scapy_service(Scapy_service_api):
     def _fully_define(self,pkt):
         # returns scapy object with all fields initialized
         rootClass = type(pkt)
-        full_pkt = rootClass(str(pkt))
+        full_pkt = rootClass(bytes(pkt))
         full_pkt.build() # this trick initializes offset
         return full_pkt
 
@@ -306,22 +346,41 @@ class Scapy_service(Scapy_service_api):
                 offset = field_desc.offset
                 protocol_offset = pkt.offset
                 field_sz = field_desc.get_size_bytes()
-                value = getattr(pkt, field_id)
-                hvalue = value
+                fieldval = getattr(pkt, field_id)
+                value = None
+                hvalue = None
                 field_type = field_desc.__class__.__name__
                 value_base64 = None
-                if type(value) not in [str, unicode]:
-                    # "nice" human value, however strings can take extra quotes
-                    # which is not acceptable. consider using i2h
-                    hvalue = field_desc.i2repr(pkt, value)
+                if is_python(3) and is_bytes3(fieldval):
+                    value_base64 = bytes_to_b64(fieldval)
+                    if is_ascii_bytes(fieldval):
+                        hvalue = bytes_to_str(fieldval)
+                        value = hvalue
+                    else:
+                        # can't be shown as ascii.
+                        # also this buffer may not be unicode-compatible(still can try to convert)
+                        value = None
+                        hvalue = '<binary>'
+                elif not is_string(fieldval):
+                    # value as is. this can be int,long, or custom object(array/map)
+                    value = fieldval
+                    # "nice" human value, i2repr(string) will have quotes, so we have special handling for them
+                    hvalue = field_desc.i2repr(pkt, fieldval)
                 if field_desc.name == 'load':
                     # show Padding(and possible similar classes) as Raw
                     layer_id = layer_name ='Raw'
                     field_sz = len(pkt)
-                    value_base64 = base64.b64encode(value)
-                    if value and not all(ord(c) < 128 for c in value):
+                    value_base64 = bytes_to_b64(fieldval) # always set value_base64 for payload, even for ascii
+                if is_python(3) and is_string(fieldval):
+                    hvalue = value = fieldval
+                if is_python(2) and is_string(fieldval):
+                    if is_ascii(fieldval):
+                        hvalue = value = fieldval
+                    else:
+                        # python2 non-ascii byte buffers
                         # payload contains non-ascii chars, which
                         # sometimes can not be passed as unicode strings
+                        value_base64 = bytes_to_b64(fieldval)
                         value = None
                         hvalue = '<binary>'
                 field_data = {
@@ -358,8 +417,8 @@ class Scapy_service(Scapy_service_api):
     def _get_md5(self,container):
         container = json.dumps(container)
         m = hashlib.md5()
-        m.update(container.encode('ascii'))
-        res_md5 = base64.b64encode(m.digest())
+        m.update(str_to_bytes(container))
+        res_md5 = bytes_to_b64(m.digest())
         return res_md5
 
     def get_version(self):
@@ -385,9 +444,8 @@ class Scapy_service(Scapy_service_api):
     def _generate_version_hash(self,v_major,v_minor):
         v_for_hash = v_major+v_minor+v_major+v_minor
         m = hashlib.md5()
-        m.update(v_for_hash)
-        v_handle = base64.b64encode(m.digest())
-        return unicode(v_handle,"utf-8")
+        m.update(str_to_bytes(v_for_hash))
+        return bytes_to_b64(m.digest())
 
     def _generate_invalid_version_error(self):
         error_desc1 = "Provided version handler does not correspond to the server's version.\nUpdate client to latest version.\nServer version:"+self.version_major+"."+self.version_minor
@@ -429,7 +487,7 @@ class Scapy_service(Scapy_service_api):
         if pkt == None:
             return {'data': [], 'binary': None}
         data = self._pkt_to_field_tree(pkt)
-        binary = base64.b64encode(str(pkt))
+        binary = bytes_to_b64(bytes(pkt))
         res = {'data': data, 'binary': binary}
         return res
 
@@ -473,8 +531,8 @@ class Scapy_service(Scapy_service_api):
         current_db_md5 = self._get_md5(db)
         current_field_md5 = self._get_md5(fields)
         res = []
-        if (field_md5.decode("base64") == current_field_md5.decode("base64")):
-            if (db_md5.decode("base64") == current_db_md5.decode("base64")):
+        if (field_md5 == current_field_md5):
+            if (db_md5 == current_db_md5):
                 return True
             else:
                 raise ScapyException("Protocol DB is not up to date")
@@ -488,7 +546,7 @@ class Scapy_service(Scapy_service_api):
 
 #input of binary_pkt must be encoded in base64
     def reconstruct_pkt(self,client_v_handler,binary_pkt,model_descriptor):
-        pkt_bin = binary_pkt.decode('base64')
+        pkt_bin = b64_to_bytes(binary_pkt)
         scapy_pkt = Ether(pkt_bin)
         if not model_descriptor:
             model_descriptor = []
@@ -527,10 +585,9 @@ class Scapy_service(Scapy_service_api):
                         # seems setfieldval already does this for some fields,
                         # but does not convert strings/hex(0x123) to integers and long
                         hvalue = field['hvalue']
-                        cval_numeric = type(current_val) in [int, long]
-                        nval_str = type(hvalue) in [str, unicode]
-                        if cval_numeric and nval_str:
-                            val_constructor = type(current_val) # from str to int/long with base as a param
+                        if is_number(current_val) and is_string(hvalue):
+                            # parse str to int/long as a decimal or hex
+                            val_constructor = type(current_val)
                             if len(hvalue) == 0:
                                 hvalue = None
                             elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
@@ -543,7 +600,7 @@ class Scapy_service(Scapy_service_api):
         return self._pkt_data(scapy_pkt)
 
     def read_pcap(self,client_v_handler,pcap_base64):
-        pcap_bin = pcap_base64.decode('base64')
+        pcap_bin = b64_to_bytes(pcap_base64)
         pcap = []
         res_packets = []
         with tempfile.NamedTemporaryFile(mode='w+b') as tmpPcap:
@@ -555,12 +612,12 @@ class Scapy_service(Scapy_service_api):
         return res_packets
 
     def write_pcap(self,client_v_handler,packets_base64):
-        packets = [Ether(pkt_b64.decode('base64')) for pkt_b64 in packets_base64]
+        packets = [Ether(b64_to_bytes(pkt_b64)) for pkt_b64 in packets_base64]
         pcap_bin = None
         with tempfile.NamedTemporaryFile(mode='r+b') as tmpPcap:
             wrpcap(tmpPcap.name, packets)
             pcap_bin = tmpPcap.read()
-        return base64.b64encode(pcap_bin)
+        return bytes_to_b64(pcap_bin)
 
  
 
