@@ -366,6 +366,8 @@ class Scapy_service(Scapy_service_api):
                     value = fieldval
                     # "nice" human value, i2repr(string) will have quotes, so we have special handling for them
                     hvalue = field_desc.i2repr(pkt, fieldval)
+                    if is_number(fieldval) and is_string(hvalue) and re.match(r"^\d+L$", hvalue):
+                        hvalue =  hvalue[:-1] # chop trailing L for number
                 if field_desc.name == 'load':
                     # show Padding(and possible similar classes) as Raw
                     layer_id = layer_name ='Raw'
