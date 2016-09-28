@@ -535,7 +535,7 @@ class Scapy_service(Scapy_service_api):
                                 hvalue = None
                             elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
                                 hvalue = val_constructor(hvalue, 16)
-                            elif re.match(r"^\d+$", hvalue): # base10
+                            elif re.match(r"^\d+L?$", hvalue): # base10
                                 hvalue = val_constructor(hvalue)
                         scapy_layer.setfieldval(fieldId, hvalue)
                     else:
