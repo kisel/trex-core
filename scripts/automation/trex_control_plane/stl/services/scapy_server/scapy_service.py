@@ -300,6 +300,34 @@ class Scapy_service(Scapy_service_api):
         tupled_protocol = self._parse_entire_description(protocol_str)
         return tupled_protocol
 
+    def _value_from_dict(self, val):
+        # allows building python objects from json
+        if type(val) == type({}):
+            value_type = val['vtype']
+            if value_type == 'expr':
+                return eval(val['expr'], {})
+            elif value_type == 'bytes':   # bytes payload(ex Raw.load)
+                return b64_to_bytes(field['base64'])
+            elif value_type == 'object':
+                return field['value']
+            else:
+                return val # it's better to specify type explicitly
+        elif type(val) == type([]):
+            return [self._value_from_dict(v) for v in val]
+        else:
+            return val
+
+    def _field_value_from_def(self, layer, field_desc, val):
+        # extensions for field values
+        if type(val) == type({}):
+            value_type = val['vtype']
+            if value_type == 'random':
+                return field_desc.randval()
+            elif value_type == 'machine': # internal machine field repr
+                return field_desc.m2i(layer, b64_to_bytes(field['base64']))
+        # generate recursive field-independent values
+        return self._value_from_dict(val)
+
     def _print_tree(self):
         pprint(self.protocol_tree)
 
@@ -362,12 +390,20 @@ class Scapy_service(Scapy_service_api):
                         value = None
                         hvalue = '<binary>'
                 elif not is_string(fieldval):
-                    # value as is. this can be int,long, or custom object(array/map)
-                    value = fieldval
+                    # value as is. this can be int,long, or custom object(list/dict)
                     # "nice" human value, i2repr(string) will have quotes, so we have special handling for them
                     hvalue = field_desc.i2repr(pkt, fieldval)
-                    if is_number(fieldval) and is_string(hvalue) and re.match(r"^\d+L$", hvalue):
-                        hvalue =  hvalue[:-1] # chop trailing L for number
+
+                    if is_number(fieldval):
+                        value = fieldval
+                        if is_string(hvalue) and re.match(r"^\d+L$", hvalue):
+                            hvalue =  hvalue[:-1] # chop trailing L for number
+                    else:
+                        # fieldval is an object( class / list / dict )
+                        # generic serialization/deserialization needed for proper packet rebuilding from packet tree,
+                        # some classes can not be mapped to json, but we can pass them serialize them
+                        # as a python eval expr, value bytes base64, or field machine internal val(m2i)
+                        value = {"vtype": "expr", "expr": hvalue}
                 if field_desc.name == 'load':
                     # show Padding(and possible similar classes) as Raw
                     layer_id = layer_name ='Raw'
@@ -459,26 +495,10 @@ class Scapy_service(Scapy_service_api):
     def _parse_packet_dict(self,layer,scapy_layers,scapy_layer_names):
         class_name = scapy_layer_names.index(layer['id'])
         class_p = scapy_layers[class_name] # class pointer
-        kwargs = {}
+        scapy_layer = class_p()
         if 'fields' in layer:
-            for field in layer['fields']:
-                key = field['id']
-                value = None
-                if 'value_base64' in field:
-                    value = b64_to_bytes(field['value_base64'])
-                else:
-                    value = field['value']
-                if type(value) is list:
-                    resolved_value = []
-                    for arg_class in value:
-                        option_class_p = scapy.all.__dict__[arg_class["class"]]
-                        option_kwargs = {}
-                        for field in arg_class['fields']:
-                            option_kwargs[field['id']] = field['value']
-                        resolved_value.append(option_class_p(**option_kwargs))
-                    value = resolved_value
-                kwargs[key] = value
-        return class_p(**kwargs)
+            self._modify_layer(scapy_layer, layer['fields'])
+        return scapy_layer
 
     def _packet_model_to_scapy_packet(self,data):
         layers = Packet.__subclasses__()
@@ -545,6 +565,38 @@ class Scapy_service(Scapy_service_api):
         else:
             raise ScapyException("Fields DB is not up to date")
 
+    def _modify_layer(self, scapy_layer, fields):
+        for field in fields:
+            fieldId = field['id']
+            if "delete" in field and field["delete"] is True:
+                scapy_layer.delfieldval(fieldId)
+            elif "randomize" in field and field["randomize"] is True:
+                # random value will be generated on binary build
+                scapy_layer.setfieldval(fieldId, scapy_layer.get_field(fieldId).randval())
+            elif "value_base64" in field:
+                buf = b64_to_bytes(field['value_base64'])
+                scapy_layer.setfieldval(fieldId, buf)
+            elif "hvalue" in field:
+                field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
+                # human-value. guess the type and convert to internal value
+                # seems setfieldval already does this for some fields,
+                # but does not convert strings/hex(0x123) to integers and long
+                hvalue = field['hvalue']
+                if is_number(current_val) and is_string(hvalue):
+                    # parse str to int/long as a decimal or hex
+                    val_constructor = type(current_val)
+                    if len(hvalue) == 0:
+                        hvalue = None
+                    elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
+                        hvalue = val_constructor(hvalue, 16)
+                    elif re.match(r"^\d+L?$", hvalue): # base10
+                        hvalue = val_constructor(hvalue)
+                scapy_layer.setfieldval(fieldId, hvalue)
+            else:
+                field_desc = scapy_layer.get_field(fieldId)
+                fieldval = self._field_value_from_def(scapy_layer, field_desc, field['value'])
+                scapy_layer.setfieldval(fieldId, fieldval)
+
     def _is_last_layer(self, layer):
         # can be used, that layer has no payload
         # if true, the layer.payload is likely NoPayload()
@@ -578,34 +630,7 @@ class Scapy_service(Scapy_service_api):
                 # TODO: support replacing payload, instead of breaking
                 raise ScapyException("Protocol id inconsistent")
             if 'fields' in model_layer:
-                for field in model_layer['fields']:
-                    fieldId = field['id']
-                    if "delete" in field and field["delete"] is True:
-                        scapy_layer.delfieldval(fieldId)
-                    elif "randomize" in field and field["randomize"] is True:
-                        # random value will be generated on binary build
-                        scapy_layer.setfieldval(fieldId, scapy_layer.get_field(fieldId).randval())
-                    elif "value_base64" in field:
-                        buf = b64_to_bytes(field['value_base64'])
-                        scapy_layer.setfieldval(fieldId, buf)
-                    elif "hvalue" in field:
-                        field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
-                        # human-value. guess the type and convert to internal value
-                        # seems setfieldval already does this for some fields,
-                        # but does not convert strings/hex(0x123) to integers and long
-                        hvalue = field['hvalue']
-                        if is_number(current_val) and is_string(hvalue):
-                            # parse str to int/long as a decimal or hex
-                            val_constructor = type(current_val)
-                            if len(hvalue) == 0:
-                                hvalue = None
-                            elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
-                                hvalue = val_constructor(hvalue, 16)
-                            elif re.match(r"^\d+L?$", hvalue): # base10
-                                hvalue = val_constructor(hvalue)
-                        scapy_layer.setfieldval(fieldId, hvalue)
-                    else:
-                        scapy_layer.setfieldval(fieldId, field['value'])
+                self._modify_layer(scapy_layer, model_layer['fields'])
         return self._pkt_data(scapy_pkt)
 
     def read_pcap(self,client_v_handler,pcap_base64):
