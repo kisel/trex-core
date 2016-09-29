@@ -29,7 +29,7 @@ class Scapy_wrapper:
     def parse_req_msg(self,JSON_req):
         try:
             req = json.loads(JSON_req)
-            req_id=b'null'
+            req_id='null'
             if (type(req)!= type({})):
                 raise ParseException(req_id)
             json_rpc_keys = ['jsonrpc','id','method']
@@ -56,10 +56,10 @@ class Scapy_wrapper:
         except ValueError:
             raise ParseException(req_id)
 
-    def create_error_response(self,error_code,error_msg,req_id='null'):
+    def create_error_response(self,error_code,error_msg,req_id):
         return {"jsonrpc": "2.0", "error": {"code": error_code, "message": error_msg}, "id": req_id}
         
-    def create_success_response(self,result,req_id=b'null'):
+    def create_success_response(self,result,req_id):
         return {"jsonrpc": "2.0", "result": result, "id": req_id }
     
     def get_exception(self):
@@ -148,10 +148,11 @@ class Scapy_server():
                     try:
                         json_response = json.dumps(response)
                         self.logger.info('Sending Message: %s' % json_response)
-                    except Exception:
+                    except Exception as e:
                         # rare case when json can not be searialized due to encoding issues
                         # object is not JSON serializable
                         self.logger.error('Unexpected Error: %s' % traceback.format_exc())
+                        json_response = json.dumps(self.scapy_wrapper.error_handler(e,req_id))
 
                 #  Send reply back to client
                     self.socket.send_string(json_response)
