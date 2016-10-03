@@ -544,8 +544,8 @@ class Scapy_service(Scapy_service_api):
         return res
 
     def _is_packet_class(self, pkt_class):
-        # returns true for final Packet classes
-        return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc
+        # returns true for final Packet classes. skips aliases and metaclasses
+        return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc and not pkt_class.aliastypes
         
     def _get_payload_classes(self, pkt):
         # tries to find, which subclasses allowed.
@@ -557,7 +557,7 @@ class Scapy_service(Scapy_service_api):
                 try:
                     pkt_w_payload = pkt_class() / pkt_subclass()
                     recreated_pkt = pkt_class(bytes(pkt_w_payload))
-                    if isinstance(recreated_pkt.lastlayer(), pkt_subclass):
+                    if type(recreated_pkt.lastlayer()) is pkt_subclass:
                         allowed_subclasses.append(pkt_subclass)
                 except Exception as e:
                     # no actions needed on fail, just sliently skip
