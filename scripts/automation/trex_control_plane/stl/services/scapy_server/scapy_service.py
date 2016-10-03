@@ -433,12 +433,6 @@ class Scapy_service(Scapy_service_api):
                     field_data["ignored"] = ignored
                 if value_base64:
                     field_data["value_base64"] = value_base64
-                if isinstance(field_desc, EnumField):
-                    try:
-                        field_data["values_dict"] = field_desc.s2i
-                    except:
-                        # MultiEnumField doesn't have s2i. need better handling
-                        pass
                 fields.append(field_data)
             layer_data = {
                     "id": layer_id,
@@ -534,6 +528,7 @@ class Scapy_service(Scapy_service_api):
         pkt = self._packet_model_to_scapy_packet(pkt_model_descriptor)
         return self._pkt_data(pkt)
 
+    # @deprecated. to be removed
     def get_all(self,client_v_handler):
         if not (self._verify_version_handler(client_v_handler)):
             raise ScapyException(self._generate_invalid_version_error())
@@ -547,6 +542,65 @@ class Scapy_service(Scapy_service_api):
         res['db_md5'] = db_md5
         res['fields_md5'] = fields_md5
         return res
+
+    def _is_packet_class(self, pkt_class):
+        # returns true for final Packet classes
+        return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc
+        
+    def _get_payload_classes(self, pkt):
+        # tries to find, which subclasses allowed.
+        # this can take long time, since it tries to build packets with all subclasses(O(N))
+        pkt_class = type(pkt)
+        allowed_subclasses = []
+        for pkt_subclass in conf.layers:
+            if self._is_packet_class(pkt_subclass):
+                try:
+                    pkt_w_payload = pkt_class() / pkt_subclass()
+                    recreated_pkt = pkt_class(bytes(pkt_w_payload))
+                    if isinstance(recreated_pkt.lastlayer(), pkt_subclass):
+                        allowed_subclasses.append(pkt_subclass)
+                except Exception as e:
+                    # no actions needed on fail, just sliently skip
+                    pass
+        return allowed_subclasses
+
+    def _get_fields_definition(self, pkt_class):
+        fields = []
+        for field_desc in pkt_class.fields_desc:
+            field_data = {
+                    "id": field_desc.name,
+                    "name": field_desc.name,
+                    "field_type": field_desc.__class__.__name__,
+            }
+            if isinstance(field_desc, EnumField):
+                try:
+                    field_data["values_dict"] = field_desc.s2i
+                except:
+                    # MultiEnumField doesn't have s2i. need better handling
+                    pass
+            fields.append(field_data)
+        return fields
+
+    def get_definitions(self,client_v_handler, def_filter):
+        # def_filter is an array of classnames or None
+        all_classes = conf.layers
+        if def_filter:
+            all_classes = [c for c in all_classes if c.__name__ in def_filter]
+        protocols = []
+        for pkt_class in all_classes:
+            if self._is_packet_class(pkt_class):
+                # enumerate all non-abstract Packet classes
+                protocols.append({
+                    "id": pkt_class.__name__,
+                    "name": pkt_class.name,
+                    "fields": self._get_fields_definition(pkt_class)
+                    })
+        res = {"protocols": protocols}
+        return res
+
+    def get_payload_classes(self,client_v_handler, pkt_model_descriptor):
+        pkt = self._packet_model_to_scapy_packet(pkt_model_descriptor)
+        return [c.__name__ for c in self._get_payload_classes(pkt)]
 
 #input in string encoded base64
     def check_update_of_dbs(self,client_v_handler,db_md5,field_md5):
