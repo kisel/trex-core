@@ -214,6 +214,25 @@ def bytes_to_b64(buf):
     # bytes to base64 string(unicode)
     return base64.b64encode(buf).decode('ascii')
 
+def get_sample_field_val(scapy_layer, fieldId):
+    # get some sample value for the field, to determine the value type
+    # use random or serialized value if default value is None
+    field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
+    if current_val is not None:
+        return current_val
+    try:
+        # try to get some random value to determine type
+        return field_desc.randval()._fix()
+    except:
+        pass
+    try:
+        # try to serialize/deserialize
+        ltype = type(scapy_layer)
+        pkt = ltype(bytes(ltype()))
+        return pkt.getfieldval(fieldId)
+    except:
+        pass
+
 class ScapyException(Exception): pass
 class Scapy_service(Scapy_service_api):
 
@@ -631,14 +650,14 @@ class Scapy_service(Scapy_service_api):
                 buf = b64_to_bytes(field['value_base64'])
                 scapy_layer.setfieldval(fieldId, buf)
             elif "hvalue" in field:
-                field_desc, current_val = scapy_layer.getfield_and_val(fieldId)
                 # human-value. guess the type and convert to internal value
                 # seems setfieldval already does this for some fields,
                 # but does not convert strings/hex(0x123) to integers and long
                 hvalue = field['hvalue']
-                if is_number(current_val) and is_string(hvalue):
+                sample_val = get_sample_field_val(scapy_layer, fieldId)
+                if is_number(sample_val) and is_string(hvalue):
                     # parse str to int/long as a decimal or hex
-                    val_constructor = type(current_val)
+                    val_constructor = type(sample_val)
                     if len(hvalue) == 0:
                         hvalue = None
                     elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
