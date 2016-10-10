@@ -670,7 +670,7 @@ class Scapy_service(Scapy_service_api):
                     val_constructor = type(sample_val)
                     if len(hvalue) == 0:
                         hvalue = None
-                    elif re.match(r"^0x\d+$", hvalue, flags=re.IGNORECASE): # hex
+                    elif re.match(r"^0x[\da-f]+$", hvalue, flags=re.IGNORECASE): # hex
                         hvalue = val_constructor(hvalue, 16)
                     elif re.match(r"^\d+L?$", hvalue): # base10
                         hvalue = val_constructor(hvalue)
