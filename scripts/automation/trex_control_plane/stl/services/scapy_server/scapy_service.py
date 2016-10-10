@@ -612,7 +612,7 @@ class Scapy_service(Scapy_service_api):
 
     def get_definitions(self,client_v_handler, def_filter):
         # def_filter is an array of classnames or None
-        all_classes = conf.layers
+        all_classes = Packet.__subclasses__() # as an alternative to conf.layers
         if def_filter:
             all_classes = [c for c in all_classes if c.__name__ in def_filter]
         protocols = []
