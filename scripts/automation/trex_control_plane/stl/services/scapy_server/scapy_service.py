@@ -509,6 +509,8 @@ class Scapy_service(Scapy_service_api):
         class_name = scapy_layer_names.index(layer['id'])
         class_p = scapy_layers[class_name] # class pointer
         scapy_layer = class_p()
+        if isinstance(scapy_layer, Raw):
+            scapy_layer.load = str_to_bytes("dummy")
         if 'fields' in layer:
             self._modify_layer(scapy_layer, layer['fields'])
         return scapy_layer
@@ -565,6 +567,14 @@ class Scapy_service(Scapy_service_api):
     def _is_packet_class(self, pkt_class):
         # returns true for final Packet classes. skips aliases and metaclasses
         return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc and not pkt_class.aliastypes
+
+    def _getDummyPacket(self, pkt_class):
+        if issubclass(pkt_class, Raw):
+            # need to have some payload. otherwise won't appear in the binary chunk
+            return pkt_class(load=str_to_bytes("dummy"))
+        else:
+            return pkt_class()
+
         
     def _get_payload_classes(self, pkt):
         # tries to find, which subclasses allowed.
@@ -574,7 +584,7 @@ class Scapy_service(Scapy_service_api):
         for pkt_subclass in conf.layers:
             if self._is_packet_class(pkt_subclass):
                 try:
-                    pkt_w_payload = pkt_class() / pkt_subclass()
+                    pkt_w_payload = pkt_class() / self._getDummyPacket(pkt_subclass)
                     recreated_pkt = pkt_class(bytes(pkt_w_payload))
                     if type(recreated_pkt.lastlayer()) is pkt_subclass:
                         allowed_subclasses.append(pkt_subclass)
