@@ -566,7 +566,7 @@ class Scapy_service(Scapy_service_api):
 
     def _is_packet_class(self, pkt_class):
         # returns true for final Packet classes. skips aliases and metaclasses
-        return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc and not pkt_class.aliastypes
+        return issubclass(pkt_class, Packet) and pkt_class.name and pkt_class.fields_desc
 
     def _getDummyPacket(self, pkt_class):
         if issubclass(pkt_class, Raw):
