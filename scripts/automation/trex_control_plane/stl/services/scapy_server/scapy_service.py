@@ -650,7 +650,7 @@ class Scapy_service(Scapy_service_api):
 
     def _modify_layer(self, scapy_layer, fields):
         for field in fields:
-            fieldId = field['id']
+            fieldId = str(field['id'])
             if "delete" in field and field["delete"] is True:
                 scapy_layer.delfieldval(fieldId)
             elif "randomize" in field and field["randomize"] is True:
@@ -666,6 +666,7 @@ class Scapy_service(Scapy_service_api):
                 hvalue = field['hvalue']
                 sample_val = get_sample_field_val(scapy_layer, fieldId)
                 if is_number(sample_val) and is_string(hvalue):
+                    hvalue = str(hvalue) # unicode -> str(ascii)
                     # parse str to int/long as a decimal or hex
                     val_constructor = type(sample_val)
                     if len(hvalue) == 0:
