@@ -323,11 +323,11 @@ class Scapy_service(Scapy_service_api):
         # allows building python objects from json
         if type(val) == type({}):
             value_type = val['vtype']
-            if value_type == 'expr':
+            if value_type == 'EXPRESSION':
                 return eval(val['expr'], {})
-            elif value_type == 'bytes':   # bytes payload(ex Raw.load)
+            elif value_type == 'BYTES':   # bytes payload(ex Raw.load)
                 return b64_to_bytes(field['base64'])
-            elif value_type == 'object':
+            elif value_type == 'OBJECT':
                 return field['value']
             else:
                 return val # it's better to specify type explicitly
@@ -340,9 +340,9 @@ class Scapy_service(Scapy_service_api):
         # extensions for field values
         if type(val) == type({}):
             value_type = val['vtype']
-            if value_type == 'random':
+            if value_type == 'RANDOM':
                 return field_desc.randval()
-            elif value_type == 'machine': # internal machine field repr
+            elif value_type == 'MACHINE': # internal machine field repr
                 return field_desc.m2i(layer, b64_to_bytes(field['base64']))
         # generate recursive field-independent values
         return self._value_from_dict(val)
@@ -396,9 +396,10 @@ class Scapy_service(Scapy_service_api):
                 fieldval = getattr(pkt, field_id)
                 value = None
                 hvalue = None
-                field_type = field_desc.__class__.__name__
+                field_type = "UNKNOWN"
                 value_base64 = None
                 if is_python(3) and is_bytes3(fieldval):
+                    field_type = "BYTES"
                     value_base64 = bytes_to_b64(fieldval)
                     if is_ascii_bytes(fieldval):
                         hvalue = bytes_to_str(fieldval)
@@ -406,6 +407,7 @@ class Scapy_service(Scapy_service_api):
                     else:
                         # can't be shown as ascii.
                         # also this buffer may not be unicode-compatible(still can try to convert)
+                        # TODO: remove this special case and let the UI decide how to show BYTES
                         value = None
                         hvalue = '<binary>'
                 elif not is_string(fieldval):
@@ -414,32 +416,38 @@ class Scapy_service(Scapy_service_api):
                     hvalue = field_desc.i2repr(pkt, fieldval)
 
                     if is_number(fieldval):
+                        field_type = "NUMBER"
                         value = fieldval
                         if is_string(hvalue) and re.match(r"^\d+L$", hvalue):
-                            hvalue =  hvalue[:-1] # chop trailing L for number
+                            hvalue =  hvalue[:-1] # chop trailing L for long decimal number(python2)
                     else:
                         # fieldval is an object( class / list / dict )
                         # generic serialization/deserialization needed for proper packet rebuilding from packet tree,
                         # some classes can not be mapped to json, but we can pass them serialize them
                         # as a python eval expr, value bytes base64, or field machine internal val(m2i)
-                        value = {"vtype": "expr", "expr": hvalue}
-                if field_desc.name == 'load':
-                    # show Padding(and possible similar classes) as Raw
-                    layer_id = layer_name ='Raw'
-                    field_sz = len(pkt)
-                    value_base64 = bytes_to_b64(fieldval) # always set value_base64 for payload, even for ascii
+                        field_type = "EXPRESSION"
+                        value = {"vtype": "EXPRESSION", "expr": hvalue}
                 if is_python(3) and is_string(fieldval):
+                    field_type = "STRING"
                     hvalue = value = fieldval
                 if is_python(2) and is_string(fieldval):
                     if is_ascii(fieldval):
+                        field_type = "STRING"
                         hvalue = value = fieldval
                     else:
+                        field_type = "BYTES"
                         # python2 non-ascii byte buffers
                         # payload contains non-ascii chars, which
                         # sometimes can not be passed as unicode strings
                         value_base64 = bytes_to_b64(fieldval)
                         value = None
                         hvalue = '<binary>'
+                if field_desc.name == 'load':
+                    # show Padding(and possible similar classes) as Raw
+                    field_type = "BYTES"
+                    layer_id = layer_name ='Raw'
+                    field_sz = len(pkt)
+                    value_base64 = bytes_to_b64(fieldval) # always set value_base64 for payload, even for ascii
                 field_data = {
                         "id": field_id,
                         "value": value,
