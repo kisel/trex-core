@@ -336,14 +336,36 @@ class Scapy_service(Scapy_service_api):
         else:
             return val
 
-    def _field_value_from_def(self, layer, field_desc, val):
+    def _human_to_field_value(self, layer, fieldId, hvalue):
+        # human-value. guess the type and convert to internal value
+        # seems setfieldval already does this for some fields,
+        # but does not convert strings/hex(0x123) to integers and long
+        sample_val = get_sample_field_val(layer, fieldId)
+        if is_number(sample_val) and is_string(hvalue):
+            hvalue = str(hvalue) # unicode -> str(ascii)
+            # parse str to int/long as a decimal or hex
+            val_constructor = type(sample_val)
+            if len(hvalue) == 0:
+                return None
+            elif re.match(r"^0x[\da-f]+$", hvalue, flags=re.IGNORECASE): # hex
+                return val_constructor(hvalue, 16)
+            elif re.match(r"^\d+L?$", hvalue): # base10
+                hvalue = val_constructor(hvalue)
+        return hvalue
+
+    def _field_value_from_def(self, layer, fieldId, val):
+        field_desc = layer.get_field(fieldId)
         # extensions for field values
         if type(val) == type({}):
             value_type = val['vtype']
-            if value_type == 'RANDOM':
+            if value_type == 'UNDEFINED': # clear field value
+                return None
+            elif value_type == 'RANDOM': # random field value
                 return field_desc.randval()
             elif value_type == 'MACHINE': # internal machine field repr
-                return field_desc.m2i(layer, b64_to_bytes(field['base64']))
+                return field_desc.m2i(layer, b64_to_bytes(val['base64']))
+            elif value_type == 'HUMAN': # guess the value type
+                return self._human_to_field_value(layer, fieldId, val["hvalue"])
         # generate recursive field-independent values
         return self._value_from_dict(val)
 
@@ -380,6 +402,10 @@ class Scapy_service(Scapy_service_api):
         full_pkt.build() # this trick initializes offset
         return full_pkt
 
+    def _bytes_to_value(self, payload_bytes):
+        # generates struct with a value
+        return { "vtype": "BYTES", "base64": bytes_to_b64(payload_bytes) }
+
     def _pkt_to_field_tree(self,pkt):
         pkt = self._fully_define(pkt)
         result = []
@@ -396,19 +422,15 @@ class Scapy_service(Scapy_service_api):
                 fieldval = getattr(pkt, field_id)
                 value = None
                 hvalue = None
-                field_type = "UNKNOWN"
                 value_base64 = None
                 if is_python(3) and is_bytes3(fieldval):
-                    field_type = "BYTES"
-                    value_base64 = bytes_to_b64(fieldval)
+                    value = self._bytes_to_value(fieldval)
                     if is_ascii_bytes(fieldval):
                         hvalue = bytes_to_str(fieldval)
-                        value = hvalue
                     else:
                         # can't be shown as ascii.
                         # also this buffer may not be unicode-compatible(still can try to convert)
-                        # TODO: remove this special case and let the UI decide how to show BYTES
-                        value = None
+                        value = self._bytes_to_value(fieldval)
                         hvalue = '<binary>'
                 elif not is_string(fieldval):
                     # value as is. this can be int,long, or custom object(list/dict)
@@ -416,7 +438,6 @@ class Scapy_service(Scapy_service_api):
                     hvalue = field_desc.i2repr(pkt, fieldval)
 
                     if is_number(fieldval):
-                        field_type = "NUMBER"
                         value = fieldval
                         if is_string(hvalue) and re.match(r"^\d+L$", hvalue):
                             hvalue =  hvalue[:-1] # chop trailing L for long decimal number(python2)
@@ -425,41 +446,32 @@ class Scapy_service(Scapy_service_api):
                         # generic serialization/deserialization needed for proper packet rebuilding from packet tree,
                         # some classes can not be mapped to json, but we can pass them serialize them
                         # as a python eval expr, value bytes base64, or field machine internal val(m2i)
-                        field_type = "EXPRESSION"
                         value = {"vtype": "EXPRESSION", "expr": hvalue}
                 if is_python(3) and is_string(fieldval):
-                    field_type = "STRING"
                     hvalue = value = fieldval
                 if is_python(2) and is_string(fieldval):
                     if is_ascii(fieldval):
-                        field_type = "STRING"
                         hvalue = value = fieldval
                     else:
-                        field_type = "BYTES"
                         # python2 non-ascii byte buffers
                         # payload contains non-ascii chars, which
                         # sometimes can not be passed as unicode strings
-                        value_base64 = bytes_to_b64(fieldval)
-                        value = None
+                        value = self._bytes_to_value(fieldval)
                         hvalue = '<binary>'
                 if field_desc.name == 'load':
                     # show Padding(and possible similar classes) as Raw
-                    field_type = "BYTES"
                     layer_id = layer_name ='Raw'
                     field_sz = len(pkt)
-                    value_base64 = bytes_to_b64(fieldval) # always set value_base64 for payload, even for ascii
+                    value = self._bytes_to_value(fieldval)
                 field_data = {
                         "id": field_id,
                         "value": value,
                         "hvalue": hvalue,
                         "offset": offset,
-                        "length": field_sz,
-                        "field_type": field_type,
+                        "length": field_sz
                         }
                 if ignored:
                     field_data["ignored"] = ignored
-                if value_base64:
-                    field_data["value_base64"] = value_base64
                 fields.append(field_data)
             layer_data = {
                     "id": layer_id,
@@ -606,8 +618,7 @@ class Scapy_service(Scapy_service_api):
         for field_desc in pkt_class.fields_desc:
             field_data = {
                     "id": field_desc.name,
-                    "name": field_desc.name,
-                    "field_type": field_desc.__class__.__name__,
+                    "name": field_desc.name
             }
             if isinstance(field_desc, EnumField):
                 try:
@@ -659,35 +670,11 @@ class Scapy_service(Scapy_service_api):
     def _modify_layer(self, scapy_layer, fields):
         for field in fields:
             fieldId = str(field['id'])
-            if "delete" in field and field["delete"] is True:
-                scapy_layer.delfieldval(fieldId)
-            elif "randomize" in field and field["randomize"] is True:
-                # random value will be generated on binary build
-                scapy_layer.setfieldval(fieldId, scapy_layer.get_field(fieldId).randval())
-            elif "value_base64" in field:
-                buf = b64_to_bytes(field['value_base64'])
-                scapy_layer.setfieldval(fieldId, buf)
-            elif "hvalue" in field:
-                # human-value. guess the type and convert to internal value
-                # seems setfieldval already does this for some fields,
-                # but does not convert strings/hex(0x123) to integers and long
-                hvalue = field['hvalue']
-                sample_val = get_sample_field_val(scapy_layer, fieldId)
-                if is_number(sample_val) and is_string(hvalue):
-                    hvalue = str(hvalue) # unicode -> str(ascii)
-                    # parse str to int/long as a decimal or hex
-                    val_constructor = type(sample_val)
-                    if len(hvalue) == 0:
-                        hvalue = None
-                    elif re.match(r"^0x[\da-f]+$", hvalue, flags=re.IGNORECASE): # hex
-                        hvalue = val_constructor(hvalue, 16)
-                    elif re.match(r"^\d+L?$", hvalue): # base10
-                        hvalue = val_constructor(hvalue)
-                scapy_layer.setfieldval(fieldId, hvalue)
-            else:
-                field_desc = scapy_layer.get_field(fieldId)
-                fieldval = self._field_value_from_def(scapy_layer, field_desc, field['value'])
+            fieldval = self._field_value_from_def(scapy_layer, fieldId, field['value'])
+            if fieldval is not None:
                 scapy_layer.setfieldval(fieldId, fieldval)
+            else:
+                scapy_layer.delfieldval(fieldId)
 
     def _is_last_layer(self, layer):
         # can be used, that layer has no payload
