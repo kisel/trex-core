@@ -336,25 +336,9 @@ class Scapy_service(Scapy_service_api):
         else:
             return val
 
-    def _human_to_field_value(self, layer, fieldId, hvalue):
-        # human-value. guess the type and convert to internal value
-        # seems setfieldval already does this for some fields,
-        # but does not convert strings/hex(0x123) to integers and long
-        sample_val = get_sample_field_val(layer, fieldId)
-        if is_number(sample_val) and is_string(hvalue):
-            hvalue = str(hvalue) # unicode -> str(ascii)
-            # parse str to int/long as a decimal or hex
-            val_constructor = type(sample_val)
-            if len(hvalue) == 0:
-                return None
-            elif re.match(r"^0x[\da-f]+$", hvalue, flags=re.IGNORECASE): # hex
-                return val_constructor(hvalue, 16)
-            elif re.match(r"^\d+L?$", hvalue): # base10
-                hvalue = val_constructor(hvalue)
-        return hvalue
-
     def _field_value_from_def(self, layer, fieldId, val):
         field_desc = layer.get_field(fieldId)
+        sample_val = get_sample_field_val(layer, fieldId)
         # extensions for field values
         if type(val) == type({}):
             value_type = val['vtype']
@@ -364,8 +348,19 @@ class Scapy_service(Scapy_service_api):
                 return field_desc.randval()
             elif value_type == 'MACHINE': # internal machine field repr
                 return field_desc.m2i(layer, b64_to_bytes(val['base64']))
-            elif value_type == 'HUMAN': # guess the value type
-                return self._human_to_field_value(layer, fieldId, val["hvalue"])
+        if is_number(sample_val) and is_string(val):
+            # human-value. guess the type and convert to internal value
+            # seems setfieldval already does this for some fields,
+            # but does not convert strings/hex(0x123) to integers and long
+            val = str(val) # unicode -> str(ascii)
+            # parse str to int/long as a decimal or hex
+            val_constructor = type(sample_val)
+            if len(val) == 0:
+                return None
+            elif re.match(r"^0x[\da-f]+$", val, flags=re.IGNORECASE): # hex
+                return val_constructor(val, 16)
+            elif re.match(r"^\d+L?$", val): # base10
+                return val_constructor(val)
         # generate recursive field-independent values
         return self._value_from_dict(val)
 
