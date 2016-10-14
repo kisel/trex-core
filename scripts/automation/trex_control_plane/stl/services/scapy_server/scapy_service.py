@@ -326,9 +326,9 @@ class Scapy_service(Scapy_service_api):
             if value_type == 'EXPRESSION':
                 return eval(val['expr'], {})
             elif value_type == 'BYTES':   # bytes payload(ex Raw.load)
-                return b64_to_bytes(field['base64'])
+                return b64_to_bytes(val['base64'])
             elif value_type == 'OBJECT':
-                return field['value']
+                return val['value']
             else:
                 return val # it's better to specify type explicitly
         elif type(val) == type([]):
