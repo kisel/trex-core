@@ -9,6 +9,8 @@ import tempfile
 import hashlib
 import base64
 import numbers
+import inspect
+import json
 from pprint import pprint
 #from scapy.layers.dns import DNS
 #from scapy.contrib.mpls import MPLS
