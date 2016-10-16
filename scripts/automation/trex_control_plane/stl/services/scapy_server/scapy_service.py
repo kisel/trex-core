@@ -177,6 +177,36 @@ class Scapy_service_api():
         """
         pass
 
+    def get_definitions(self,client_v_handler, def_filter):
+        """ get_definitions(self,client_v_handler, def_filter)
+
+        Returns protocols and fields metadata of scapy service
+
+        Parameters
+        ----------
+        def_filter - array of protocol names
+
+        Returns
+        -------
+        definitions for protocols
+        """
+        pass
+
+    def get_payload_classes(self,client_v_handler, pkt_model_descriptor):
+        """ get_payload_classes(self,client_v_handler, pkt_model_descriptor)
+
+        Returns an array of protocol classes, which normally can be used as a payload
+
+        Parameters
+        ----------
+        pkt_model_descriptor - see build_pkt
+
+        Returns
+        -------
+        array of supported protocol classes
+        """
+        pass
+
 def is_python(version):
     return version == sys.version_info[0]
 
