@@ -28,6 +28,26 @@ from scapy.contrib.igmp import *
 from scapy.contrib.igmpv3 import *
 import scapy_extensions
 
+_VXLAN_FLAGS = ['R' for i in range(0, 24)] + ['R', 'R', 'R', 'I', 'R', 'R', 'R', 'R', 'R']
+
+class MY11ThreeBytesField(X3BytesField, ByteField):
+    def i2repr(self, pkt, x):
+        return ByteField.i2repr(self, pkt, x)
+
+
+class VXLAN(Packet):
+    name = "VXLAN"
+    fields_desc = [FlagsField("flags", 0x08000000, 32, _VXLAN_FLAGS),
+                   MY11ThreeBytesField("vni", 0),
+                   XByteField("reserved", 0x00)]
+
+    def mysummary(self):
+        return self.sprintf("VXLAN (vni=%VXLAN.vni%)")
+
+bind_layers(UDP, VXLAN, dport=4789)
+bind_layers(VXLAN, Ether)
+
+
 
 
 

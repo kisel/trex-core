@@ -201,6 +201,19 @@
         "type": "BYTES"
       }
     ]
+  },
+  {
+    "id": "VXLAN",
+    "fields": [
+      {
+        "id": "vni",
+        "values_dict": {
+            "1": 1,
+            "7": 7
+        }
+      }
+    ]
   }
+
 ]
 
