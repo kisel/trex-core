@@ -26,6 +26,8 @@ from scapy.layers.tftp import *
 from scapy.contrib.mpls import *
 from scapy.contrib.igmp import *
 from scapy.contrib.igmpv3 import *
+import scapy_extensions
+
 
 
 
@@ -753,7 +755,7 @@ class Scapy_service(Scapy_service_api):
             for fieldDef in fieldsDef:
                 if fieldDef['id'] == fieldId:
                     field_data.update(fieldDef)
-            if isinstance(field_desc, EnumField):
+            if isinstance(field_desc, EnumField) or hasattr(field_desc, "isenum"):
                 try:
                     field_data["values_dict"] = field_desc.s2i
                     if field_data.get("type") == None:
