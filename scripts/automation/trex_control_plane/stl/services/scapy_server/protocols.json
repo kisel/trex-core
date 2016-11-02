@@ -177,7 +177,8 @@
         "name": "Options",
         "type": "TCP_OPTIONS"
       }
-    ]
+    ],
+    "payload": ["Raw", "HTTP"]
   },
   {
     "id": "Raw",
