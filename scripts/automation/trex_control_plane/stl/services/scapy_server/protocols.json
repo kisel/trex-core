@@ -181,6 +181,17 @@
     "payload": ["Raw", "HTTP"]
   },
   {
+    "id": "HTTP",
+    "name": "HyperText Transfer Protocol",
+    "fields": [
+      {
+        "id": "data",
+        "name": "HTTP Payload",
+        "type": "BYTES"
+      }
+    ]
+  },
+  {
     "id": "Raw",
     "name": "Raw",
     "fields": [
