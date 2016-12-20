@@ -982,7 +982,8 @@ class Scapy_service(Scapy_service_api):
     def _get_templates(self,client_v_handler):
         templates = []
         for filename in os.listdir("templates"):
-            templates.append(filename)
+            if filename.endswith('.trp'):
+                templates.append(filename)
         return templates
 
     def _get_template(self,client_v_handler,template_name):
