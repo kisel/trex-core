@@ -1,4 +1,4 @@
-TRex Analytics Report
+TRex Performance Trend
 ======================
 :email: trex.tgen@gmail.com 
 :quotes.++:
@@ -85,7 +85,6 @@ include::build/images/trex09_trend_stats.csv[]
 |===
 
 
-//////////////////////////////////////////////////////////////
 
 == Setup:  82599EB (4x10GbE) kiwi02
 
@@ -119,7 +118,6 @@ include::build/images/kiwi02_trend_stats.csv[]
 |===
 
 
-//////////////////////////////////////////////////////////
 
 == Setup:   Cisco 1300 VIC (2x40GbE) trex-11
 
@@ -186,6 +184,14 @@ image:images/trex07_trend_graph.png[title="trex07_trend_graph",align="left",widt
 [format="csv", options="header",halign='center']
 |===
 include::build/images/trex07_trend_stats.csv[]
+|===
+
+== Comparison between Mellanox ConnectX-4 (2x100GbE) (trex-07) and XL710 (4x40GbE)  (trex-08)
+image:images/_comparison.png[title="comparison",align="left",width={p_width}, link="images/_comparison.png"]
+ 
+[format="csv", options="header",halign='center']
+|===
+include::build/images/_comparison_stats_table.csv[]
 |===
 
 

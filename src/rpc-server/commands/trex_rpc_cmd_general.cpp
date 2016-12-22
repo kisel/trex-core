@@ -631,7 +631,8 @@ TrexRpcCmdPushRemote::_run(const Json::Value &params, Json::Value &result) {
     uint8_t port_id = parse_port(params, result);
     std::string  pcap_filename  = parse_string(params, "pcap_filename", result);
     double       ipg_usec       = parse_double(params, "ipg_usec", result);
-    double       speedup        = parse_double(params, "speedup", result);
+    double       min_ipg_sec    = usec_to_sec(parse_udouble(params, "min_ipg_usec", result, 0));
+    double       speedup        = parse_udouble(params, "speedup", result);
     uint32_t     count          = parse_uint32(params, "count", result);
     double       duration       = parse_double(params, "duration", result);
     bool         is_dual        = parse_bool(params,   "is_dual", result, false);
@@ -649,7 +650,7 @@ TrexRpcCmdPushRemote::_run(const Json::Value &params, Json::Value &result) {
 
 
     try {
-        port->push_remote(pcap_filename, ipg_usec, speedup, count, duration, is_dual);
+        port->push_remote(pcap_filename, ipg_usec, min_ipg_sec, speedup, count, duration, is_dual);
     } catch (const TrexException &ex) {
         generate_execute_err(result, ex.what());
     }
@@ -799,7 +800,11 @@ TrexRpcCmdSetL2::_run(const Json::Value &params, Json::Value &result) {
         generate_parse_err(result, ss.str());
     }
     
-    port->set_l2_mode(dst_mac);
+    try {
+        port->set_l2_mode(dst_mac);
+    } catch (const TrexException &ex) {
+        generate_execute_err(result, ex.what());
+    }
     
     return (TREX_RPC_CMD_OK);
 }
@@ -844,11 +849,19 @@ TrexRpcCmdSetL3::_run(const Json::Value &params, Json::Value &result) {
             generate_parse_err(result, ss.str());
         } 
     
-        port->set_l3_mode(src_ipv4, dst_ipv4, mac);
+        try {
+            port->set_l3_mode(src_ipv4, dst_ipv4, mac);
+        } catch (const TrexException &ex) {
+            generate_execute_err(result, ex.what());
+        }
         
     } else {
+        try {
+            port->set_l3_mode(src_ipv4, dst_ipv4);
+        } catch (const TrexException &ex) {
+            generate_execute_err(result, ex.what());
+        }
         
-        port->set_l3_mode(src_ipv4, dst_ipv4);
     }
     
     return (TREX_RPC_CMD_OK);    

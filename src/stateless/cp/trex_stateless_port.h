@@ -221,6 +221,7 @@ public:
      */
     void push_remote(const std::string &pcap_filename,
                      double            ipg_usec,
+                     double            min_ipg_sec,
                      double            speedup,
                      uint32_t          count,
                      double            duration,
@@ -513,6 +514,7 @@ private:
     TrexPortOwner       m_owner;
 
     int m_pending_async_stop_event;
+    static const uint32_t MAX_STREAMS = 20000;
 
 };
 

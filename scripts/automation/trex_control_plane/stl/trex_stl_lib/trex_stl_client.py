@@ -15,6 +15,7 @@ from .utils import parsing_opts, text_tables, common
 from .utils.common import *
 from .utils.text_opts import *
 from functools import wraps
+from texttable import ansi_len
 
 from collections import namedtuple
 from yaml import YAMLError
@@ -101,7 +102,8 @@ class LoggerApi(object):
 
             def __enter__ (self):
                 self.saved_level = self.logger.get_verbose()
-                self.logger.set_verbose(self.level)
+                if self.level < self.saved_level:
+                    self.logger.set_verbose(self.level)
 
             def __exit__ (self, type, value, traceback):
                 self.logger.set_verbose(self.saved_level)
@@ -776,7 +778,7 @@ class STLClient(object):
         return rc
 
 
-    def __push_remote (self, pcap_filename, port_id_list, ipg_usec, speedup, count, duration, is_dual):
+    def __push_remote (self, pcap_filename, port_id_list, ipg_usec, speedup, count, duration, is_dual, min_ipg_usec):
 
         port_id_list = self.__ports(port_id_list)
         rc = RC()
@@ -792,7 +794,8 @@ class STLClient(object):
                                                    count,
                                                    duration,
                                                    is_dual,
-                                                   slave_handler))
+                                                   slave_handler,
+                                                   min_ipg_usec))
 
         return rc
 
@@ -2002,6 +2005,8 @@ class STLClient(object):
         if not rc:
             raise STLError(rc)
 
+        return rc.data()
+
     @__api_check(True)
     def get_util_stats(self):
         """
@@ -2021,7 +2026,6 @@ class STLClient(object):
 
     @__api_check(True)
     def get_xstats(self, port_id):
-        print(port_id)
         """
             Get extended stats of port: all the counters as dict.
 
@@ -2491,7 +2495,8 @@ class STLClient(object):
                      speedup = 1.0,
                      count = 1,
                      duration = -1,
-                     is_dual = False):
+                     is_dual = False,
+                     min_ipg_usec = None):
         """
             Push a remote server-reachable PCAP file
             the path must be fullpath accessible to the server
@@ -2504,7 +2509,8 @@ class STLClient(object):
                     Ports on which to execute the command
 
                 ipg_usec : float
-                    Inter-packet gap in microseconds
+                    Inter-packet gap in microseconds.
+                    Exclusive with min_ipg_usec
 
                 speedup : float
                     A factor to adjust IPG. effectively IPG = IPG / speedup
@@ -2521,6 +2527,10 @@ class STLClient(object):
                     also requires that all the ports will be in master mode
                     with their adjacent ports as slaves
 
+                min_ipg_usec : float
+                    Minimum inter-packet gap in microseconds to guard from too small ipg.
+                    Exclusive with ipg_usec
+
             :raises:
                 + :exc:`STLError`
 
@@ -2534,6 +2544,7 @@ class STLClient(object):
         validate_type('count',  count, int)
         validate_type('duration', duration, (float, int))
         validate_type('is_dual', is_dual, bool)
+        validate_type('min_ipg_usec', min_ipg_usec, (float, int, type(None)))
 
         # for dual mode check that all are masters
         if is_dual:
@@ -2552,7 +2563,7 @@ class STLClient(object):
 
 
         self.logger.pre_cmd("Pushing remote PCAP on port(s) {0}:".format(ports))
-        rc = self.__push_remote(pcap_filename, ports, ipg_usec, speedup, count, duration, is_dual)
+        rc = self.__push_remote(pcap_filename, ports, ipg_usec, speedup, count, duration, is_dual, min_ipg_usec)
         self.logger.post_cmd(rc)
 
         if not rc:
@@ -2570,7 +2581,8 @@ class STLClient(object):
                    force = False,
                    vm = None,
                    packet_hook = None,
-                   is_dual = False):
+                   is_dual = False,
+                   min_ipg_usec = None):
         """
             Push a local PCAP to the server
             This is equivalent to loading a PCAP file to a profile
@@ -2586,7 +2598,8 @@ class STLClient(object):
                     Ports on which to execute the command
 
                 ipg_usec : float
-                    Inter-packet gap in microseconds
+                    Inter-packet gap in microseconds.
+                    Exclusive with min_ipg_usec
 
                 speedup : float
                     A factor to adjust IPG. effectively IPG = IPG / speedup
@@ -2612,6 +2625,10 @@ class STLClient(object):
                     also requires that all the ports will be in master mode
                     with their adjacent ports as slaves
 
+                min_ipg_usec : float
+                    Minimum inter-packet gap in microseconds to guard from too small ipg.
+                    Exclusive with ipg_usec
+
             :raises:
                 + :exc:`STLError`
 
@@ -2626,6 +2643,9 @@ class STLClient(object):
         validate_type('duration', duration, (float, int))
         validate_type('vm', vm, (list, type(None)))
         validate_type('is_dual', is_dual, bool)
+        validate_type('min_ipg_usec', min_ipg_usec, (float, int, type(None)))
+        if all([ipg_usec, min_ipg_usec]):
+            raise STLError('Please specify either ipg or minimal ipg, not both.')
 
 
         # no support for > 1MB PCAP - use push remote
@@ -2654,7 +2674,8 @@ class STLClient(object):
                                                speedup,
                                                count,
                                                vm = vm,
-                                               packet_hook = packet_hook)
+                                               packet_hook = packet_hook,
+                                               min_ipg_usec = min_ipg_usec)
                 self.logger.post_cmd(RC_OK)
             except STLError as e:
                 self.logger.post_cmd(RC_ERR(e))
@@ -2679,7 +2700,8 @@ class STLClient(object):
                                                             count,
                                                             vm = vm,
                                                             packet_hook = packet_hook,
-                                                            split_mode = split_mode)
+                                                            split_mode = split_mode,
+                                                            min_ipg_usec = min_ipg_usec)
 
                 self.logger.post_cmd(RC_OK())
 
@@ -2970,11 +2992,6 @@ class STLClient(object):
         ports = ports if ports is not None else self.get_resolvable_ports()
         ports = self._validate_port_list(ports)
             
-        active_ports = list_intersect(ports, self.get_active_ports())
-        if active_ports:
-            raise STLError('Port(s) {0} are active, please stop them before resolving'.format(active_ports))
-                     
-        
         self.logger.pre_cmd('Resolving destination on port(s) {0}:'.format(ports))
         with self.logger.supress():
             rc = self.__resolve(ports, retries)
@@ -3396,9 +3413,8 @@ class STLClient(object):
                 self.add_streams(profile.get_streams(), ports = port)
 
         except STLError as e:
-            error = 'Unknown error.'
-            for line in e.brief().split('\n'):
-                if line:
+            for line in e.brief().splitlines():
+                if ansi_len(line.strip()):
                     error = line
             msg = format_text("\nError loading profile '{0}'".format(opts.file[0]), 'bold')
             self.logger.log(msg + '\n')
@@ -3655,6 +3671,7 @@ class STLClient(object):
                 parsing_opts.COUNT,
                 parsing_opts.DURATION,
                 parsing_opts.IPG,
+                parsing_opts.MIN_IPG,
                 parsing_opts.SPEEDUP,
                 parsing_opts.FORCE,
                 parsing_opts.DUAL]
@@ -3685,22 +3702,24 @@ class STLClient(object):
 
         if opts.remote:
             self.push_remote(opts.file[0],
-                             ports     = opts.ports,
-                             ipg_usec  = opts.ipg_usec,
-                             speedup   = opts.speedup,
-                             count     = opts.count,
-                             duration  = opts.duration,
-                             is_dual   = opts.dual)
+                             ports          = opts.ports,
+                             ipg_usec       = opts.ipg_usec,
+                             min_ipg_usec   = opts.min_ipg_usec,
+                             speedup        = opts.speedup,
+                             count          = opts.count,
+                             duration       = opts.duration,
+                             is_dual        = opts.dual)
 
         else:
             self.push_pcap(opts.file[0],
-                           ports     = opts.ports,
-                           ipg_usec  = opts.ipg_usec,
-                           speedup   = opts.speedup,
-                           count     = opts.count,
-                           duration  = opts.duration,
-                           force     = opts.force,
-                           is_dual   = opts.dual)
+                           ports          = opts.ports,
+                           ipg_usec       = opts.ipg_usec,
+                           min_ipg_usec   = opts.min_ipg_usec,
+                           speedup        = opts.speedup,
+                           count          = opts.count,
+                           duration       = opts.duration,
+                           force          = opts.force,
+                           is_dual        = opts.dual)
 
         
 
