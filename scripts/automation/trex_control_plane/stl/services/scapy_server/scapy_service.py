@@ -274,12 +274,12 @@ class Scapy_service_api():
 
         Returns
         -------
-        array of templates names
+        array of templates
         """
         pass
 
-    def get_template(self,client_v_handler,template_name):
-        """ get_template(self,client_v_handler,template_name)
+    def get_template(self,client_v_handler,template):
+        """ get_template(self,client_v_handler,template)
 
         Returns a template, which normally can be used for creating packet
 
@@ -980,7 +980,7 @@ class Scapy_service(Scapy_service_api):
 
 
 
-    def _get_templates(self,client_v_handler):
+    def _get_templates(self):
         # Make sure you understand the three return values of os.walk:
         #
         # for root, subdirs, files in os.walk(rootdir):
@@ -997,12 +997,26 @@ class Scapy_service(Scapy_service_api):
         for root, subdirs, files in os.walk("templates"):
             for file in files:
                 if file.endswith('.trp'):
-                    f = os.path.join(root, file)
-                    templates.append(f.replace("templates/", ""))
+                    try:
+                        f = os.path.join(root, file)
+                        o = open(f)
+                        c = json.loads(o.read())
+                        o.close()
+                        t = {
+                                "id": f.replace("templates" + os.path.sep, "", 1)[::-1].replace(".trp"[::-1], "", 1)[::-1].replace(os.path.sep, "/"),
+                                 "meta": {
+                                     "name": c["metadata"]["caption"],
+                                     "description": "",
+                                     "path": f
+                                 }
+                            }
+                        templates.append(t)
+                    except:
+                        pass
         return templates
 
-    def _get_template(self,client_v_handler,template_name):
-        with open('templates/' + template_name + '.trp', 'r') as content_file:
+    def _get_template(self,template):
+        with open(template['meta']['path'], 'r') as content_file:
             content = base64.b64encode(content_file.read())
         return content
 
@@ -1068,10 +1082,10 @@ class Scapy_service(Scapy_service_api):
         return [c.__name__ for c in self._get_payload_classes(pkt_class)]
 
     def get_templates(self,client_v_handler):
-        return self._get_templates(client_v_handler)
+        return self._get_templates()
 
-    def get_template(self,client_v_handler,template_name):
-        return self._get_template(client_v_handler,template_name)
+    def get_template(self,client_v_handler,template):
+        return self._get_template(template)
 
 #input in string encoded base64
     def check_update_of_dbs(self,client_v_handler,db_md5,field_md5):
