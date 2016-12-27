@@ -2,6 +2,7 @@
 import time
 import sys
 import os
+import platform
 import traceback
 
 stl_pathname = os.path.abspath(os.path.join(os.pardir, os.pardir))
@@ -123,6 +124,7 @@ class Scapy_server():
 
     def activate(self):
         self.logger.info('***Scapy Server Started***')
+        self.logger.info("Platform: " + platform.system())
         self.logger.info('Listening on port: %d' % self.port)
         self.logger.info('Server IP address: %s' % self.IP_address)
         try:
