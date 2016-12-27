@@ -1002,12 +1002,15 @@ class Scapy_service(Scapy_service_api):
                         o = open(f)
                         c = json.loads(o.read())
                         o.close()
+                        id = f.replace("templates" + os.path.sep, "", 1)
+                        id = id.split(os.path.sep)
+                        id[-1] = id[-1].replace(".trp", "", 1)
+                        id = "/".join(id)
                         t = {
-                                "id": f.replace("templates" + os.path.sep, "", 1)[::-1].replace(".trp"[::-1], "", 1)[::-1].replace(os.path.sep, "/"),
+                                "id": id,
                                  "meta": {
                                      "name": c["metadata"]["caption"],
-                                     "description": "",
-                                     "path": f
+                                     "description": ""
                                  }
                             }
                         templates.append(t)
@@ -1016,7 +1019,16 @@ class Scapy_service(Scapy_service_api):
         return templates
 
     def _get_template(self,template):
-        with open(template['meta']['path'], 'r') as content_file:
+        id = template["id"]
+        f2 = "templates" + os.path.sep + os.path.sep.join(id.split("/")) + ".trp"
+        for c in r'[]\;,><&*:%=+@!#^()|?^':
+            id = id.replace(c,'')
+        id = id.replace("..", "")
+        id = id.split("/")
+        f = "templates" + os.path.sep + os.path.sep.join(id) + ".trp"
+        if f != f2:
+            return ""
+        with open(f, 'r') as content_file:
             content = base64.b64encode(content_file.read())
         return content
 

@@ -294,7 +294,7 @@ def test_generate_vm_instructions():
 def test_get_templates():
     tt = get_templates()
     assert(tt[0]['id'])
-    assert(tt[7]["meta"]['path'])
+    assert(tt[7]["meta"]['name'])
     try:
         assert(tt[9]['id'])
     except:
@@ -321,3 +321,11 @@ def test_get_template2():
     assert(obj['packet'][0]['id'] == 'Ether')
     assert(obj['packet'][1]['id'] == 'IPv6')
     assert(obj['packet'][2]['id'] == 'UDP')
+
+
+def test_get_template3():
+    tt = get_templates()
+    t = tt[7]
+    t["id"] = "../../" + t["id"]
+    res = get_template(t)
+    assert(res == '')
